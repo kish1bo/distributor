@@ -1,6 +1,8 @@
 #include "kernel.h"
 #include "console.h"
 #include "filesystem.h"
+#include "sysctl.h"
+#include "instalator_tool.h"
 #include <iostream>
 #include <string>
 #include <sstream>
@@ -18,13 +20,15 @@ Kernel::Kernel() : currentUser(nullptr), systemState(SystemState::LOGGED_OUT) {
     initCommands();
 }
 FileSystem filesys;
+Sysctl sysctl;
+InstalatorTool instalator;
 
 std::string Kernel::hashPassword(const std::string& password) {
     return std::to_string(std::hash<std::string>{}(password));
 }
 
 void Kernel::boot() {
-    Console::titlebar();
+    Console::titlebar("");
     initCommands();
 }
 
@@ -37,6 +41,9 @@ void Kernel::initCommands() {
     commands["ls"] = [this](const Command&) { filesys.ls(); };
     commands["mkdir"] = [this](const Command& c) { filesys.mkdir(c.value); };
     commands["cd"] = [this](const Command& c) { filesys.cd(c.value); };
+    commands["systemctl", "network"] = [this](const Command& c) {sysctl.netmngr();};
+    commands["systemctl", "services"] = [this](const Command& c) {sysctl.services();};
+    commands["instal"] = [this](const Command& c) {InstalatorTool tool; tool.run();};
 
     // Add more commands here as needed
 }
@@ -85,7 +92,8 @@ bool Kernel::login(const std::string& username, const std::string& password) {
             currentUser = &user;
             systemState = user.isAdmin ? SystemState::ADMIN : SystemState::USER;
             Console::clear();
-            Console::colortxt("Login successful. Welcome, " + username + "!", "green");
+            std::string message = "Login successful. Welcome, " + username + "!";
+            Console::colortxt(message, "green");
             return true;
         }
     }

@@ -35,9 +35,10 @@ namespace Console {
         std::cout << "\033[31mError: " << text << "\033[0m\n";
     }
     
-    void titlebar() {
+    void titlebar(const std::string& process) {
         Console::clear();
-        Console::println("\033[36mJOJO OS v0.1\033[0m");
+        Console::println("\033[36mJOJO OS v0.2\033[0m");
+        Console::println("\033[32m" + process + "\033[0m\n");
         Console::println("Type 'help' to begin\n");
     }
     void colortxt(std::string text, std::string color) {
