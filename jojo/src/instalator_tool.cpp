@@ -20,7 +20,7 @@ void InstalatorTool::listInstalled() {
         }
         infile.close();
     } else {
-        Console::errormsg("Failed to read installed_packages.txt");
+        Console::errormsg("FILE_NOT_FOUND", "Failed to read downloads/packages.txt");
     }
 }
 
@@ -33,7 +33,7 @@ void InstalatorTool::install(const std::string& package) {
         outfile << package << std::endl;
         outfile.close();
     } else {
-        Console::errormsg("Failed to write to downloads/packages.txt");
+        Console::errormsg("FILE_NOT_FOUND", "Failed to write to downloads/packages.txt");
     }
     Console::println("Package '" + package + "' installed successfully.");
 }
@@ -69,7 +69,7 @@ void InstalatorTool::run() {
         } else if (input == "list") {
             listInstalled();
         } else {
-            Console::errormsg("Unknown command. Type 'help' for available commands.");
+            Console::errormsg("UNKNOWN_COMMAND", "Unknown command. Type 'help' for available commands.");
         }
     }
 }

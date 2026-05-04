@@ -10,6 +10,6 @@ REM Set environment
 call %VS_PATH%\VC\Auxiliary\Build\vcvarsall.bat x64
 
 REM Compile
-cl /EHsc /I%MSVC_PATH%\include /I%WIN_KITS%\Include\10.0.22621.0\ucrt /I%WIN_KITS%\Include\10.0.22621.0\um /I%WIN_KITS%\Include\10.0.22621.0\shared src\main.cpp src\kernel.cpp src\console.cpp /Fe:jojo.exe /link /LIBPATH:%MSVC_PATH%\lib\x64 /LIBPATH:%WIN_KITS%\Lib\10.0.22621.0\ucrt\x64 /LIBPATH:%WIN_KITS%\Lib\10.0.22621.0\um\x64
+cl /std:c++17 /EHsc /I%MSVC_PATH%\include /I%WIN_KITS%\Include\10.0.22621.0\ucrt /I%WIN_KITS%\Include\10.0.22621.0\um /I%WIN_KITS%\Include\10.0.22621.0\shared src\main.cpp src\kernel.cpp src\console.cpp src\filesystem.cpp /Fe:jojo.exe /link /LIBPATH:%MSVC_PATH%\lib\x64 /LIBPATH:%WIN_KITS%\Lib\10.0.22621.0\ucrt\x64 /LIBPATH:%WIN_KITS%\Lib\10.0.22621.0\um\x64
 
 echo Build complete!

@@ -14,6 +14,10 @@ namespace {
 }
 
 namespace Console {
+    constexpr const char* reset = "\033[0m";
+    constexpr const char* bold = "\033[1m";
+    constexpr const char* red = "\033[31m";
+    constexpr const char* f = "\033[48;2;R;G;Bm";
 
     void init() {
         enableANSI();
@@ -31,17 +35,17 @@ namespace Console {
         std::cout << text << "\n";
     }
     
-    void errormsg(const std::string& text) {
-        std::cout << "\033[31mError: " << text << "\033[0m\n";
+    void errormsg(const std::string& type, const std::string& text) {
+        std::cout<< bold << type + " " << reset;
+        std::cout << "\033[31mERROR: " << text << "\033[0m\n";
     }
     
-    void titlebar(const std::string& process) {
+    void titlebar() {
         Console::clear();
-        Console::println("\033[36mJOJO OS v0.2\033[0m");
-        Console::println("\033[32m" + process + "\033[0m\n");
+        Console::println("\033[36mJOJO OS v0.2.0\033[0m");
         Console::println("Type 'help' to begin\n");
     }
-    void colortxt(std::string text, std::string color) {
+    void colortxt(const std::string& text, const std::string& color) {
         std::string colorCode;
         if (color == "red") colorCode = "\033[31m";
         else if (color == "green") colorCode = "\033[32m";
