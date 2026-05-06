@@ -1,6 +1,10 @@
 #include "kernel.h"
 #include "console.h"
 #include "filesystem.h"
+#include "sysctl.h"
+#include "instalator_tool.h"
+#include <fstream>
+#include <functional>
 #include <algorithm>
 #include <cctype>
 #include <ctime>
@@ -15,7 +19,7 @@
 #include <tlhelp32.h>
 
 namespace {
-    constexpr const char* kProgramVersion = "0.3.0";
+    constexpr const char* kProgramVersion = "0.3.1";
 
     std::string formatClock(long long seconds) {
         long long h = seconds / 3600;
@@ -241,13 +245,15 @@ Kernel::Kernel() : currentUser(nullptr), systemState(SystemState::LOGGED_OUT) {
 }
 
 Kernel::~Kernel() = default;
+Sysctl sysctl;
+InstalatorTool instl;
 
 std::string Kernel::hashPassword(const std::string& password) {
     return std::to_string(std::hash<std::string>{}(password));
 }
 
 void Kernel::boot() {
-    Console::titlebar();
+    Console::titlebar("");
     if (fileSystem) {
         fileSystem->syncToPermissions();
     }
@@ -255,7 +261,6 @@ void Kernel::boot() {
 
 void Kernel::initCommands() {
     commands.clear();
-
     commands["login"] = [this](const Command& cmd) { cmdLogin(cmd); };
     commands["logout"] = [this](const Command& cmd) { cmdLogout(cmd); };
     commands["help"] = [this](const Command& cmd) { cmdHelp(cmd); };
@@ -281,6 +286,10 @@ void Kernel::initCommands() {
     commands["processes"] = [this](const Command& c) { cmdProcesses(c); };
     commands["time"] = [this](const Command& c) { timeof(c); };
     commands["jojo"] = [this](const Command& c) { cmdJojo(c); };
+    commands["systemctl", "net"] = [this](const Command& c) { sysctl.netmngr(c.parameter, c.extra); };
+    commands["systemctl", "services"] = [this](const Command& c) { sysctl.services(c.parameter); };
+    commands["install"] = [this](const Command& c) { instl.install(c.value, c.parameter); };
+    commands["instalator"] = [this](const Command& c) { instl.run(); };
 }
 
 Command Kernel::parseCommand(const std::string& input) {
@@ -315,28 +324,10 @@ bool Kernel::userExists(const std::string& login) const { //check if user with g
         [&](const User& u) { return u.username == login; });
 }
 
-std::string Kernel::buildPrompt() {
-    if(systemState == SystemState::LOGGED_OUT) {
-        return "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";
-    }
-    else if(systemState == SystemState::USER) {
-        return "\033[36m" + currentUser->username + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";
-    }
-    else if(systemState == SystemState::GUEST){
-        return "\033[36m" + currentUser->username + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";
-    }
-    else if(systemState == SystemState::ADMIN){
-       return "\033[31m" + currentUser->username + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";
-    }
-    else {
-        return "\033[35m@jojOS__unresolvedprompt:\033[0m\033[33m/\033[31m$\033[0m ";
-    }
-}
-
 void Kernel::run() {
     std::string input;
     while (true) {
-        std::cout << buildPrompt();
+        std::cout << Console::buildPrompt("");
         std::getline(std::cin, input);
 
         if (input == "exit") break;
@@ -357,6 +348,7 @@ bool Kernel::login(const std::string& username, const std::string& password) {
                 systemState = SystemState::ADMIN;
             } else if (toLower(user.username) == "guest") {
                 systemState = SystemState::GUEST;
+                logs::log("User '" + currentUsername() + "' logged in as guest.");
             } else {
                 systemState = SystemState::USER;
             }
@@ -366,7 +358,7 @@ bool Kernel::login(const std::string& username, const std::string& password) {
             }
 
             Console::clear();
-            Console::titlebar();
+            Console::titlebar("");
             Console::colortxt("Login successful. Welcome, ", "green");
             if (systemState == SystemState::ADMIN) {
                 Console::colortxt(username, "red");
@@ -423,6 +415,7 @@ void Kernel::cmdLogin(const Command& cmd) {
     }
 
     login(cmd.value, cmd.parameter);
+    logs::log("User '" + currentUsername() + "' logged in.");
 }
 
 void Kernel::cmdLogout(const Command& cmd) {
@@ -440,7 +433,7 @@ void Kernel::cmdLogout(const Command& cmd) {
     }
 
     Console::clear();
-    Console::titlebar();
+    Console::titlebar("");
     Console::println("Logged out successfully.");
 }
 
@@ -609,7 +602,7 @@ void Kernel::cmdAppend(const Command& cmd) { //append to file
     fileSystem->writeFile(cmd.value, text, true);
 }
 
-void Kernel::cmdProcesses(const Command& cmd) { //show process list with duplicates counted as xN, e.g. "chrome.exe x5"
+void Kernel::cmdProcesses(const Command& cmd) { //show process list with duplicates counted as xN, e.g.
     (void)cmd;
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) {
@@ -750,7 +743,7 @@ void Kernel::printVersionPage() const {
     Console::println("");
     Console::println("\033[1mProgram\033[0m");
     Console::println(std::string("  Version          : v") + kProgramVersion);
-    Console::println("  Runtime mode     : terminal GUI page");
+    Console::println("  Runtime mode     : normal");
     Console::println("");
     Console::println("\033[1mComputer\033[0m");
     Console::println("  Host name        : " + computerName);
@@ -764,9 +757,9 @@ void Kernel::printVersionPage() const {
     Console::println("  Current user     : " + userInfo);
     Console::println("  System uptime    : " + uptime.systemUptime());
     if (systemState == SystemState::LOGGED_OUT) {
-        Console::println("  Session uptime   : none");
+        Console::println("  Logged session uptime   : none");
     } else {
-        Console::println("  Session uptime   : " + uptime.sessionUptime());
+        Console::println("  Logged session uptime   : " + uptime.sessionUptime());
     }
     Console::println("");
     Console::println("Use 'help' to see available commands.");

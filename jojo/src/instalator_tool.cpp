@@ -10,7 +10,7 @@
 
 std::vector<std::string> installedPackages = {"git", "curl", "vim"};
 
-void InstalatorTool::listInstalled() {
+void InstalatorTool::listInstalled(const std::string& parameter) {
     Console::println("Installed packages:");
     std::ifstream infile("downloads/packages.txt");
     if (infile.is_open()) {
@@ -20,56 +20,57 @@ void InstalatorTool::listInstalled() {
         }
         infile.close();
     } else {
-        Console::errormsg("FILE_NOT_FOUND", "Failed to read downloads/packages.txt");
+        Console::errormsg("FILE_NOT_FOUND", "Failed to read" + parameter);
     }
 }
 
-void InstalatorTool::install(const std::string& package) {
+void InstalatorTool::install(const std::string& dir, const std::string& package) {
     installedPackages.push_back(package);
     Console::println("Installing package: " + package);
     std::this_thread::sleep_for(std::chrono::seconds(2)); // Simulate installation time
-    std::ofstream outfile("downloads/packages.txt", std::ios::app);
+    std::ofstream outfile(dir, std::ios::app);
     if (outfile.is_open()) {
         outfile << package << std::endl;
         outfile.close();
     } else {
-        Console::errormsg("FILE_NOT_FOUND", "Failed to write to downloads/packages.txt");
+        Console::errormsg("DIR_NOT_FOUND", "Failed to write to " + dir);
     }
-    Console::println("Package '" + package + "' installed successfully.");
+    Console::println("Package '" + package + "' installed.");
 }
 
 void InstalatorTool::uninstall(const std::string& package) {
     installedPackages.erase(std::remove(installedPackages.begin(), installedPackages.end(), package), installedPackages.end());
     Console::println("Uninstalling package: " + package);
     std::this_thread::sleep_for(std::chrono::seconds(1)); // Simulate uninstallation time
-    Console::println("Package '" + package + "' uninstalled successfully.");
+    Console::println("Package '" + package + "' uninstalled.");
 }
 
 void InstalatorTool::run() {
     Console::titlebar("Instalator");
-    Console::println("Welcome to the Instalator Tool. Type 'help' for commands.");
+    Console::println("Welcome to the Instalator Tool. Type 'help -client' for commands.");
     std::string input;
     while (true) {
         Console::print("> ");
         std::getline(std::cin, input);
         if (input == "exit") {
             break;
-        } else if (input == "help") {
+        } else if (input == "help -client") {
             Console::println("Available commands:");
-            Console::println("- install <package>: Install a package");
+            Console::println("- install <directory> <package>: Install a package");
             Console::println("- uninstall <package>: Uninstall a package");
             Console::println("- list: List all installed packages");
             Console::println("- exit: Exit the tool");
         } else if (input.rfind("install ", 0) == 0) {
-            std::string package = input.substr(8);
-            install(package);
+            std::string dir = input.substr(8);
+            std::string package = input.substr(dir.length() + 9);
+            install(dir, package);
         } else if (input.rfind("uninstall ", 0) == 0) {
             std::string package = input.substr(10);
             uninstall(package);
         } else if (input == "list") {
             listInstalled();
         } else {
-            Console::errormsg("UNKNOWN_COMMAND", "Unknown command. Type 'help' for available commands.");
+            Console::errormsg("UNKNOWN_COMMAND", "Type 'help -client' for available commands.");
         }
     }
 }

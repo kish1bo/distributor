@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <vector>
 
+#define VERSION = "0.3.1";
+
 struct User {
     std::string username;
     std::string passwordHash;
@@ -66,7 +68,6 @@ public:
     bool userExists(const std::string& login) const;
     void boot();
     void run();
-    std::string buildPrompt();
     void initCommands();
     void handleCommand(const Command& cmd);
 

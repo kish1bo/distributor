@@ -4,6 +4,7 @@
 namespace Console {
     void init();
     void clear();
+    std::string buildPrompt(const std::string& activeApp);
     void print(const std::string& text);
     void println(const std::string& text);
     void errormsg(const std::string& type, const std::string& text);

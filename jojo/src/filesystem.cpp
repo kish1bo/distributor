@@ -261,7 +261,7 @@ void FileSystem::cd(const std::string& path) {
 
     fs::path target = resolvePath(path.empty() ? "/" : path);
     if (!fs::exists(target) || !fs::is_directory(target)) {
-        Console::errormsg("NO_DIRECTORY", "CD: no such directory");
+        Console::errormsg("NO_DIRECTORY", "CD: no such file or directory");
         return;
     }
     if (!isInsideBoundary(target, activeBoundary())) {
