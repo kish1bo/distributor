@@ -1,9 +1,6 @@
 #include "console.h"
-#include "kernel.h"
 #include <windows.h>
 #include <iostream>
-
-#define VERSION = "0.3.1";
 
 namespace {
     void enableANSI() {
@@ -15,15 +12,13 @@ namespace {
     }
 }
 
-SystemState systemState;
-User* currentUser;
 namespace Console {
     constexpr const char* reset = "\033[0m";
     constexpr const char* bold = "\033[1m";
     constexpr const char* red = "\033[31m";
     constexpr const char* f = "\033[48;2;R;G;Bm";
 
-    std::string buildPrompt(const std::string activeApp) {
+    std::string buildPrompt(const std::string& activeApp, const SystemState& systemState, User* currentUser) {
     if(systemState == SystemState::LOGGED_OUT && activeApp.empty()) {         //......................................................................................................
         return "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";            //
     }                                                                         //
@@ -71,9 +66,9 @@ namespace Console {
         std::cout << "\033[31mERROR: " << text << "\033[0m\n";
     }
     
-    void titlebar() {
+    void titlebar(const std::string& title) {
         Console::clear();
-        Console::println("\033[36mJOJO OS" + VERSION + "\033[0m");
+        Console::println("\033[36mJOJO OS 0.3.1\033[0m");
         Console::println("Type 'help' to begin\n");
     }
     void colortxt(const std::string& text, const std::string& color) {

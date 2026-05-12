@@ -12,7 +12,7 @@ public:
 
     explicit FileSystem(Kernel* kernel);
 
-    void pwd(const std::string& type);
+    void pwd(const std::string& path = ".");
     void ls();
     void mkdir(const std::string& name);
     void mkfile(const std::string& name, const std::string& format);

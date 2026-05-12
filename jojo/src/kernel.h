@@ -16,10 +16,8 @@ struct User {
 };
 
 struct Command {
-    std::string def;
-    std::string value;
-    std::string parameter;
-    std::string extra;
+    std::string name;
+    std::vector<std::string> args;
 };
 
 enum class SystemState {
@@ -58,7 +56,7 @@ private:
     bool login(const std::string& username, const std::string& password);
     Command parseCommand(const std::string& input);
     User* findUser(const std::string& username);
-    std::string commandTail(const Command& cmd) const;
+    std::string commandTail(const Command& cmd, size_t start = 1) const;
     std::string currentRoleName() const;
 
 public:

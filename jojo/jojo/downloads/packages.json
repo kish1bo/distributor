@@ -1,0 +1,16 @@
+[
+  {
+    "name": "hello",
+    "version": "1.0.0",
+    "url": "file://./downloads/package_repo/hello-1.0.pkg",
+    "description": "Sample package that installs a simple placeholder file.",
+    "entry": "hello"
+  },
+  {
+    "name": "network-monitor",
+    "version": "1.2.0",
+    "url": "file://./downloads/package_repo/network-monitor-1.0.pkg",
+    "description": "Network monitoring stub package for test installs.",
+    "entry": "network-monitor"
+  }
+]

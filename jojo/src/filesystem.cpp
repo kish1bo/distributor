@@ -18,7 +18,7 @@ namespace {
 FileSystem::FileSystem() {
     kernel = nullptr;
     root = detectRoot();
-    cage = root / "distributor" / "virtualFS";
+    cage = root / "jojo";
 
     fs::create_directories(cage);
 }
@@ -123,7 +123,7 @@ void FileSystem::syncToPermissions() {
     }
 }
 
-void FileSystem::pwd(const std::string& type) {
+void FileSystem::pwd(const std::string& path) {
     if (!isLoggedIn()) {
         Console::errormsg("MISSING_ACTION", "PWD: access denied");
         return;
@@ -132,12 +132,12 @@ void FileSystem::pwd(const std::string& type) {
 
     fs::path boundary = activeBoundary();
     fs::path visible = current;
-    if (type == "..") {
+    if (path == "..") {
         visible = fs::weakly_canonical(current.parent_path());
         if (!isInsideBoundary(visible, boundary)) {
             visible = boundary;
         }
-    } else if (type == "/") {
+    } else if (path == "/") {
         visible = boundary;
     }
 

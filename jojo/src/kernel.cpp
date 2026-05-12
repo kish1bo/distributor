@@ -1,3 +1,5 @@
+#define UNICODE
+#define _UNICODE
 #include "kernel.h"
 #include "console.h"
 #include "filesystem.h"
@@ -38,7 +40,6 @@ namespace {
         time_t programStart;
         time_t loginTime;
         bool loggedIn;
-        
 
     public:
         SystemUptime()
@@ -137,7 +138,10 @@ namespace {
 
         if (Process32First(snapshot, &entry)) {
             do {
-                std::string exeName = entry.szExeFile;
+                std::wstring exe = entry.szExeFile;
+                char exeBuffer[260];
+                WideCharToMultiByte(CP_ACP, 0, exe.c_str(), -1, exeBuffer, sizeof(exeBuffer), NULL, NULL);
+                std::string exeName = exeBuffer;
                 if (!isProcessNameMatch(processName, exeName)) {
                     continue;
                 }
@@ -247,6 +251,7 @@ Kernel::Kernel() : currentUser(nullptr), systemState(SystemState::LOGGED_OUT) {
 Kernel::~Kernel() = default;
 Sysctl sysctl;
 InstalatorTool instl;
+SystemUptime uptime;
 
 std::string Kernel::hashPassword(const std::string& password) {
     return std::to_string(std::hash<std::string>{}(password));
@@ -265,55 +270,95 @@ void Kernel::initCommands() {
     commands["logout"] = [this](const Command& cmd) { cmdLogout(cmd); };
     commands["help"] = [this](const Command& cmd) { cmdHelp(cmd); };
     commands["whoiam"] = [this](const Command& cmd) { cmdWhoiam(cmd); };
-    commands["where"] = [this](const Command& c) { fileSystem->pwd(c.value); };
+    commands["where"] = [this](const Command& cmd) {
+        std::string path = cmd.args.empty() ? "." : cmd.args[0];
+        fileSystem->pwd(path);
+    };
     commands["ls"] = [this](const Command&) { fileSystem->ls(); };
-    commands["mkdir"] = [this](const Command& c) { fileSystem->mkdir(c.value); };
-    commands["mkfile"] = [this](const Command& c) { fileSystem->mkfile(c.value, c.parameter); };
-    commands["mktxt"] = [this](const Command& c) { fileSystem->mkfile(c.value, "--txt"); };
-    commands["mkjson"] = [this](const Command& c) { fileSystem->mkfile(c.value, "--json"); };
-    commands["mkcsv"] = [this](const Command& c) { fileSystem->mkfile(c.value, "--csv"); };
-    commands["mkxml"] = [this](const Command& c) { fileSystem->mkfile(c.value, "--xml"); };
-    commands["mkmd"] = [this](const Command& c) { fileSystem->mkfile(c.value, "--md"); };
-    commands["cd"] = [this](const Command& c) { fileSystem->cd(c.value); };
-    commands["rm"] = [this](const Command& c) { fileSystem->rm(c.value); };
-    commands["rmdir"] = [this](const Command& c) { fileSystem->rmdir(c.value); };
-    commands["read"] = [this](const Command& c) { cmdRead(c); };
-    commands["cat"] = [this](const Command& c) { cmdRead(c); };
-    commands["write"] = [this](const Command& c) { cmdWrite(c); };
-    commands["append"] = [this](const Command& c) { cmdAppend(c); };
-    commands["root"] = [this](const Command& c) { cmdRoot(c); };
-    commands["ps"] = [this](const Command& c) { cmdProcesses(c); };
-    commands["processes"] = [this](const Command& c) { cmdProcesses(c); };
-    commands["time"] = [this](const Command& c) { timeof(c); };
-    commands["jojo"] = [this](const Command& c) { cmdJojo(c); };
-    commands["systemctl", "net"] = [this](const Command& c) { sysctl.netmngr(c.parameter, c.extra); };
-    commands["systemctl", "services"] = [this](const Command& c) { sysctl.services(c.parameter); };
-    commands["install"] = [this](const Command& c) { instl.install(c.value, c.parameter); };
-    commands["instalator"] = [this](const Command& c) { instl.run(); };
+    commands["mkdir"] = [this](const Command& cmd) { fileSystem->mkdir(cmd.args.empty() ? "" : cmd.args[0]); };
+    commands["mkfile"] = [this](const Command& cmd) {
+        std::string name = cmd.args.empty() ? "" : cmd.args[0];
+        std::string format = cmd.args.size() > 1 ? cmd.args[1] : "";
+        fileSystem->mkfile(name, format);
+    };
+    commands["mktxt"] = [this](const Command& cmd) { fileSystem->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--txt"); };
+    commands["mkjson"] = [this](const Command& cmd) { fileSystem->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--json"); };
+    commands["mkcsv"] = [this](const Command& cmd) { fileSystem->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--csv"); };
+    commands["mkxml"] = [this](const Command& cmd) { fileSystem->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--xml"); };
+    commands["mkmd"] = [this](const Command& cmd) { fileSystem->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--md"); };
+    commands["cd"] = [this](const Command& cmd) { fileSystem->cd(cmd.args.empty() ? "/" : cmd.args[0]); };
+    commands["rm"] = [this](const Command& cmd) { fileSystem->rm(cmd.args.empty() ? "" : cmd.args[0]); };
+    commands["rmdir"] = [this](const Command& cmd) { fileSystem->rmdir(cmd.args.empty() ? "" : cmd.args[0]); };
+    commands["read"] = [this](const Command& cmd) { cmdRead(cmd); };
+    commands["cat"] = [this](const Command& cmd) { cmdRead(cmd); };
+    commands["write"] = [this](const Command& cmd) { cmdWrite(cmd); };
+    commands["append"] = [this](const Command& cmd) { cmdAppend(cmd); };
+    commands["root"] = [this](const Command& cmd) { cmdRoot(cmd); };
+    commands["ps"] = [this](const Command& cmd) { cmdProcesses(cmd); };
+    commands["processes"] = [this](const Command& cmd) { cmdProcesses(cmd); };
+    commands["time"] = [this](const Command& cmd) { timeof(cmd); };
+    commands["jojo"] = [this](const Command& cmd) { cmdJojo(cmd); };
+    commands["systemctl"] = [this](const Command& cmd) { sysctl.handle(cmd); };
+    commands["install"] = [this](const Command& cmd) { instl.install(cmd.args); };
+    commands["instalator"] = [this](const Command& cmd) { instl.run(); };
 }
 
 Command Kernel::parseCommand(const std::string& input) {
     Command cmd;
-    std::stringstream ss(input);
     std::vector<std::string> tokens;
-    std::string temp;
+    std::string current;
+    bool inQuotes = false;
+    char quoteChar = 0;
+    bool escaped = false;
 
-    while (ss >> temp) {
-        tokens.push_back(temp);
+    for (char ch : input) {
+        if (escaped) {
+            current.push_back(ch);
+            escaped = false;
+            continue;
+        }
+
+        if (ch == '\\') {
+            escaped = true;
+            continue;
+        }
+
+        if (inQuotes) {
+            if (ch == quoteChar) {
+                inQuotes = false;
+                quoteChar = 0;
+                tokens.push_back(current);
+                current.clear();
+            } else {
+                current.push_back(ch);
+            }
+            continue;
+        }
+
+        if (ch == '"' || ch == '\'') {
+            inQuotes = true;
+            quoteChar = ch;
+            continue;
+        }
+
+        if (std::isspace(static_cast<unsigned char>(ch))) {
+            if (!current.empty()) {
+                tokens.push_back(current);
+                current.clear();
+            }
+            continue;
+        }
+
+        current.push_back(ch);
     }
 
-    if (!tokens.empty()) cmd.def = tokens[0];
-    if (tokens.size() > 1) cmd.value = tokens[1];
-    if (tokens.size() > 2) cmd.parameter = tokens[2];
-    if (tokens.size() > 3) {
-        std::ostringstream tail;
-        for (size_t i = 3; i < tokens.size(); ++i) {
-            if (i > 3) {
-                tail << " ";
-            }
-            tail << tokens[i];
-        }
-        cmd.extra = tail.str();
+    if (!current.empty()) {
+        tokens.push_back(current);
+    }
+
+    if (!tokens.empty()) {
+        cmd.name = toLower(tokens[0]);
+        cmd.args.assign(tokens.begin() + 1, tokens.end());
     }
 
     return cmd;
@@ -324,7 +369,7 @@ bool Kernel::userExists(const std::string& login) const { //check if user with g
         [&](const User& u) { return u.username == login; });
 }
 
-void Kernel::run() {
+void Kernel::run() { //main loop
     std::string input;
     while (true) {
         std::cout << Console::buildPrompt("");
@@ -338,7 +383,7 @@ void Kernel::run() {
     }
 }
 
-bool Kernel::login(const std::string& username, const std::string& password) {
+bool Kernel::login(const std::string& username, const std::string& password) { //attempt to login with given credentials
     std::string hashed = hashPassword(password);
 
     for (auto& user : users) {
@@ -382,20 +427,20 @@ bool Kernel::login(const std::string& username, const std::string& password) {
     return false;
 }
 
-void Kernel::handleCommand(const Command& cmd) { 
-    if (cmd.def.empty()) {
+void Kernel::handleCommand(const Command& cmd) { //handle incoming commands
+    if (cmd.name.empty()) {
         return;
     }
 
     if (systemState == SystemState::LOGGED_OUT &&
-        cmd.def != "login" &&
-        cmd.def != "help" &&
-        cmd.def != "jojo") {
+        cmd.name != "login" &&
+        cmd.name != "help" &&
+        cmd.name != "jojo") {
         Console::errormsg("MISSING_ACTION", "Please login first.");
         return;
     }
 
-    auto it = commands.find(cmd.def);
+    auto it = commands.find(cmd.name);
     if (it != commands.end()) {
         it->second(cmd);
     } else {
@@ -403,22 +448,22 @@ void Kernel::handleCommand(const Command& cmd) {
     }
 }
 
-void Kernel::cmdLogin(const Command& cmd) {
+void Kernel::cmdLogin(const Command& cmd) { //handle login command
     if (systemState != SystemState::LOGGED_OUT) {
         Console::errormsg("MISSING_ACTION", "Use 'logout' first.");
         return;
     }
 
-    if (cmd.value.empty() || cmd.parameter.empty()) {
+    if (cmd.args.size() < 2) {
         Console::errormsg("", "Usage: login <username> <password>");
         return;
     }
 
-    login(cmd.value, cmd.parameter);
+    login(cmd.args[0], cmd.args[1]);
     logs::log("User '" + currentUsername() + "' logged in.");
 }
 
-void Kernel::cmdLogout(const Command& cmd) {
+void Kernel::cmdLogout(const Command& cmd) { //handle logout command
     (void)cmd;
     if (systemState == SystemState::LOGGED_OUT) {
         Console::errormsg("MISSING_ACTION", "Not logged in.");
@@ -438,11 +483,10 @@ void Kernel::cmdLogout(const Command& cmd) {
 }
 
 void Kernel::cmdHelp(const Command& cmd) {
-    (void)cmd;
     Console::println("Available commands:");
     Console::println("  login <username> <password> - Login to the system");
     Console::println("  logout - Logout from the system");
-    Console::println("  help - Show this help message");
+    Console::println("  help [-e] - Show this help message");
     Console::println("  whoiam - Show who is logged in");
     Console::println("  root grant|revoke <username> - Manage root rights (admin only)");
     Console::println("  root list - Show users with root rights");
@@ -461,9 +505,13 @@ void Kernel::cmdHelp(const Command& cmd) {
     Console::println("  time sys - Show system + session uptime");
     Console::println("  time <process> --process - Show process uptime");
     Console::println("  jojo --version - Show GUI-style system page");
+    Console::println("  instalator - Open installer tool");
+    Console::println("  install <package> - Install package from repository index");
+    Console::println("  systemctl <command> [args] - Manage services");
     Console::println("  exit - Exit the terminal");
-    if(cmd.parameter == "-e") {
-        Console::println("MISSING_ACTION - Miss of necessary action");
+
+    if (!cmd.args.empty() && cmd.args[0] == "-e") {
+        Console::println("MISSING_ACTION - Missing required action");
         Console::println("NO_MEMBER_FOUND - No user found with given name");
         Console::println("ROOT: admin only - Command requires admin privileges");
         Console::println("UNKNOWN_COMMAND - Command not recognized");
@@ -501,12 +549,12 @@ void Kernel::cmdRoot(const Command& cmd) { //grant or revoke root rights to user
         return;
     }
 
-    std::string action = toLower(cmd.value);
-    if (action.empty()) {
+    if (cmd.args.empty()) {
         Console::errormsg("MISSING_ACTION", "Usage: root grant|revoke <username> | root list");
         return;
     }
 
+    std::string action = toLower(cmd.args[0]);
     if (action == "list") {
         Console::println("Users with root rights:");
         bool hasAny = false;
@@ -522,12 +570,12 @@ void Kernel::cmdRoot(const Command& cmd) { //grant or revoke root rights to user
         return;
     }
 
-    if (cmd.parameter.empty()) {
+    if (cmd.args.size() < 2) {
         Console::errormsg("MISSING_ACTION", "Usage: root grant|revoke <username>");
         return;
     }
 
-    User* target = findUser(cmd.parameter);
+    User* target = findUser(cmd.args[1]);
     if (!target) {
         Console::errormsg("NO_MEMBER_FOUND", "ROOT: user not found");
         return;
@@ -565,41 +613,41 @@ void Kernel::cmdRoot(const Command& cmd) { //grant or revoke root rights to user
 }
 
 void Kernel::cmdRead(const Command& cmd) { //read and cat do the same thing
-    if (cmd.value.empty()) {
+    if (cmd.args.empty()) {
         Console::errormsg("MISSING_ACTION", "Usage: read <file>");
         return;
     }
-    fileSystem->readFile(cmd.value);
+    fileSystem->readFile(cmd.args[0]);
 }
 
-void Kernel::cmdWrite(const Command& cmd) {//overwrite file
-    if (cmd.value.empty()) {
-        Console::errormsg("MISSING_ACTION", "Usage: write <file> <text...>");
+void Kernel::cmdWrite(const Command& cmd) { //overwrite file
+    if (cmd.args.size() < 2) {
+        Console::errormsg("MISSING_ACTION", "Usage: write <file> <text...");
         return;
     }
 
-    std::string text = commandTail(cmd);
+    std::string text = commandTail(cmd, 1);
     if (text.empty()) {
-        Console::errormsg("MISSING_ACTION", "Usage: write <file> <text...>");
+        Console::errormsg("MISSING_ACTION", "Usage: write <file> <text...");
         return;
     }
 
-    fileSystem->writeFile(cmd.value, text, false);
+    fileSystem->writeFile(cmd.args[0], text, false);
 }
 
 void Kernel::cmdAppend(const Command& cmd) { //append to file
-    if (cmd.value.empty()) {
-        Console::errormsg("MISSING_ACTION", "Usage: append <file> <text...>");
+    if (cmd.args.size() < 2) {
+        Console::errormsg("MISSING_ACTION", "Usage: append <file> <text...");
         return;
     }
 
-    std::string text = commandTail(cmd);
+    std::string text = commandTail(cmd, 1);
     if (text.empty()) {
-        Console::errormsg("MISSING_ACTION", "Usage: append <file> <text...>");
+        Console::errormsg("MISSING_ACTION", "Usage: append <file> <text...");
         return;
     }
 
-    fileSystem->writeFile(cmd.value, text, true);
+    fileSystem->writeFile(cmd.args[0], text, true);
 }
 
 void Kernel::cmdProcesses(const Command& cmd) { //show process list with duplicates counted as xN, e.g.
@@ -610,15 +658,17 @@ void Kernel::cmdProcesses(const Command& cmd) { //show process list with duplica
         return;
     }
 
-    PROCESSENTRY32 entry;
-    entry.dwSize = sizeof(entry);
+    PROCESSENTRY32W entry;
+    std::wstring exe = entry.szExeFile;
 
     std::map<std::string, int> counts;
     std::unordered_map<std::string, std::string> displayName;
 
     if (Process32First(snapshot, &entry)) {
         do {
-            std::string name = entry.szExeFile;
+            char exeBuffer[260];
+            WideCharToMultiByte(CP_ACP, 0, exe.c_str(), -1, exeBuffer, sizeof(exeBuffer), NULL, NULL);
+            std::string name = exeBuffer;
             std::string key = toLower(name);
             counts[key]++;
             if (displayName.find(key) == displayName.end()) {
@@ -646,7 +696,7 @@ void Kernel::cmdProcesses(const Command& cmd) { //show process list with duplica
 }
 
 void Kernel::cmdJojo(const Command& cmd) {
-    if (cmd.value == "--version") {
+    if (!cmd.args.empty() && cmd.args[0] == "--version") {
         printVersionPage();
         return;
     }
@@ -654,18 +704,19 @@ void Kernel::cmdJojo(const Command& cmd) {
     Console::errormsg("MISSING_ACTION", "Usage: jojo --version");
 }
 
-void Kernel::timeof(const Command& cmd) {
-    if (cmd.parameter == "--process") {
-        if (cmd.value.empty()) {
+void Kernel::timeof(const Command& cmd) { //time sys shows system uptime and session uptime, time <process> --process shows process uptime
+    if (!cmd.args.empty() && cmd.args.back() == "--process") {
+        if (cmd.args.size() < 2) {
             Console::errormsg("MISSING_ACTION", "Usage: time <process> --process");
             return;
         }
 
+        std::string processName = cmd.args[0];
         long long seconds = 0;
         int matches = 0;
         std::string exeName;
         std::string error;
-        if (!queryProcessUptimeSeconds(cmd.value, seconds, matches, exeName, error)) {
+        if (!queryProcessUptimeSeconds(processName, seconds, matches, exeName, error)) {
             if (error == "not_found") {
                 Console::errormsg("NO_PROCESS", "Process not found.");
             } else if (error == "access_denied") {
@@ -686,7 +737,7 @@ void Kernel::timeof(const Command& cmd) {
         return;
     }
 
-    if (cmd.value == "sys") {
+    if (!cmd.args.empty() && cmd.args[0] == "sys") {
         Console::print("from start: ");
         std::cout << uptime.systemUptime() << "\n";
         if (systemState == SystemState::LOGGED_OUT) {
@@ -701,7 +752,7 @@ void Kernel::timeof(const Command& cmd) {
     Console::errormsg("MISSING_ACTION", "Usage: time sys | time <process> --process");
 }
 
-void Kernel::printVersionPage() const {
+void Kernel::printVersionPage() const { //print version information
     char computerNameBuffer[MAX_COMPUTERNAME_LENGTH + 1] = {};
     DWORD computerNameSize = MAX_COMPUTERNAME_LENGTH + 1;
     std::string computerName = "unknown";
@@ -765,7 +816,7 @@ void Kernel::printVersionPage() const {
     Console::println("Use 'help' to see available commands.");
 }
 
-User* Kernel::findUser(const std::string& username) {
+User* Kernel::findUser(const std::string& username) { //find user by name and return pointer to it, or nullptr if not found
     for (auto& user : users) {
         if (user.username == username) {
             return &user;
@@ -774,31 +825,34 @@ User* Kernel::findUser(const std::string& username) {
     return nullptr;
 }
 
-std::string Kernel::commandTail(const Command& cmd) const {
-    if (cmd.parameter.empty()) {
+std::string Kernel::commandTail(const Command& cmd, size_t start) const { //get the part of the command after the first N tokens, used for write and append text
+    if (cmd.args.size() <= start) {
         return "";
     }
 
-    if (cmd.extra.empty()) {
-        return cmd.parameter;
+    std::ostringstream out;
+    for (size_t i = start; i < cmd.args.size(); ++i) {
+        if (i > start) {
+            out << " ";
+        }
+        out << cmd.args[i];
     }
-
-    return cmd.parameter + " " + cmd.extra;
+    return out.str();
 }
 
-bool Kernel::isRootUser() const {
+bool Kernel::isRootUser() const { //check if current user has root rights (but is not admin, since admin has separate full access)
     return currentUser != nullptr && currentUser->hasRoot && !currentUser->isAdmin;
 }
 
-bool Kernel::canAccessRootArea() const {
+bool Kernel::canAccessRootArea() const { //check if user can access root area, which is either admin or has root rights
     return systemState == SystemState::ADMIN || isRootUser();
 }
 
-std::string Kernel::currentUsername() const {
+std::string Kernel::currentUsername() const { //get current username or empty string if not logged in
     return currentUser ? currentUser->username : "";
 }
 
-std::string Kernel::currentRoleName() const {
+std::string Kernel::currentRoleName() const { //get current role name
     if (systemState == SystemState::ADMIN) return "admin";
     if (isRootUser()) return "root";
     if (systemState == SystemState::GUEST) return "guest";
@@ -806,6 +860,6 @@ std::string Kernel::currentRoleName() const {
     return "logged_out";
 }
 
-std::string Kernel::currentRoleLabel() const {
+std::string Kernel::currentRoleLabel() const { //get current role label for display, e.g. in prompt
     return currentRoleName();
 }
