@@ -1,5 +1,6 @@
 ﻿#include "instalator_tool.h"
 #include "console.h"
+#include "kernel.h"
 #include <fstream>
 #include <iostream>
 #include <filesystem>
@@ -9,6 +10,7 @@
 #include <map>
 #include <sstream>
 #include <cctype>
+#include <functional>
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -424,6 +426,45 @@ void InstalatorTool::install(const std::vector<std::string>& args) {
     if (!downloadFile(selected->url, destination)) {
         Console::errormsg("DOWNLOAD_FAILED", "Failed to download package from " + selected->url);
         return;
+    }
+
+    // inspect package for simple manifest instructions
+    try {
+        std::ifstream pkgIn(destination);
+        if (pkgIn) {
+            std::string line;
+            while (std::getline(pkgIn, line)) {
+                auto toks = tokenize(line);
+                if (toks.empty()) continue;
+                if (toks[0] == "create_user") {
+                    if (toks.size() >= 3) {
+                        std::string username = toks[1];
+                        std::string password = toks[2];
+                        bool isAdmin = (toks.size() > 3 && (toks[3] == "1" || toLower(toks[3]) == "true"));
+                        if (g_kernel) {
+                            g_kernel->addUser(username, password, isAdmin);
+                        } else {
+                            fs::path usersPath = fs::current_path() / "var" / "users.txt";
+                            fs::create_directories(usersPath.parent_path());
+                            std::ofstream out(usersPath, std::ios::app);
+                            if (out) {
+                                out << username << ":" << std::to_string(std::hash<std::string>{}(password)) << ":" << (isAdmin ? "1" : "0") << ":0\n";
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                if (toks[0] == "enable_process_control") {
+                    fs::path flag = fs::current_path() / "var" / "process_control_enabled";
+                    fs::create_directories(flag.parent_path());
+                    std::ofstream(flag);
+                    continue;
+                }
+            }
+        }
+    } catch (...) {
+        // ignore manifest errors
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(1));

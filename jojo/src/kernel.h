@@ -50,6 +50,7 @@ private:
     void cmdJojo(const Command& cmd);
     void timeof(const Command& cmd);
     void printVersionPage() const;
+    void cmdProcctl(const Command& cmd);
 
     // Utility functions
     std::string hashPassword(const std::string& password);
@@ -62,6 +63,9 @@ private:
 public:
     Kernel();
     ~Kernel();
+    void addUser(const std::string& username, const std::string& password, bool isAdmin = false);
+    void loadUsers();
+    void saveUsers();
     void loadConfig();
     bool userExists(const std::string& login) const;
     void boot();
@@ -75,3 +79,6 @@ public:
     std::string currentRoleLabel() const;
     SystemState getSystemState() const { return systemState; }
 };
+
+// global kernel pointer (set from main)
+extern Kernel* g_kernel;

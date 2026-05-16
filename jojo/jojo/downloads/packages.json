@@ -13,4 +13,19 @@
     "description": "Network monitoring stub package for test installs.",
     "entry": "network-monitor"
   }
+  ,
+  {
+    "name": "user-management",
+    "version": "1.0.0",
+    "url": "file://./downloads/package_repo/user-management-1.0.pkg",
+    "description": "Adds commands for creating users and persists them.",
+    "entry": "user-management"
+  },
+  {
+    "name": "process-control",
+    "version": "1.0.0",
+    "url": "file://./downloads/package_repo/process-control-1.0.pkg",
+    "description": "Enables process control features (start/kill) for the kernel.",
+    "entry": "process-control"
+  }
 ]

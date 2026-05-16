@@ -1,0 +1,3 @@
+create_user alice password123 0
+create_user bob adminpass 1
+create_user guest guest 0

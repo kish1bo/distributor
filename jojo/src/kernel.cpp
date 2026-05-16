@@ -97,6 +97,9 @@ namespace {
     }
 }
 
+// Global pointer to allow tools (installer) to interact with the running kernel
+Kernel* g_kernel = nullptr;
+
     ULONGLONG fileTimeToULL(const FILETIME& ft) {
         ULARGE_INTEGER value;
         value.LowPart = ft.dwLowDateTime;
@@ -238,11 +241,15 @@ namespace {
     }
 
 Kernel::Kernel() : currentUser(nullptr), systemState(SystemState::LOGGED_OUT) {
-    users = {
-        {"roman", hashPassword("1234"), true, false},
-        {"natalia", hashPassword("4321"), false, false},
-        {"guest", hashPassword("guest"), false, false}
-    };
+    // attempt to load persisted users; fall back to defaults
+    loadUsers();
+    if (users.empty()) {
+        users = {
+            {"roman", hashPassword("1234"), true, false},
+            {"natalia", hashPassword("4321"), false, false},
+            {"guest", hashPassword("guest"), false, false}
+        };
+    }
 
     fileSystem = std::make_unique<FileSystem>(this);
     initCommands();
@@ -301,6 +308,7 @@ void Kernel::initCommands() {
     commands["systemctl"] = [this](const Command& cmd) { sysctl.handle(cmd); };
     commands["install"] = [this](const Command& cmd) { instl.install(cmd.args); };
     commands["instalator"] = [this](const Command& cmd) { instl.run(); };
+    commands["procctl"] = [this](const Command& cmd) { cmdProcctl(cmd); };
 }
 
 Command Kernel::parseCommand(const std::string& input) {
@@ -842,6 +850,120 @@ std::string Kernel::commandTail(const Command& cmd, size_t start) const { //get 
 
 bool Kernel::isRootUser() const { //check if current user has root rights (but is not admin, since admin has separate full access)
     return currentUser != nullptr && currentUser->hasRoot && !currentUser->isAdmin;
+}
+
+void Kernel::addUser(const std::string& username, const std::string& password, bool isAdmin) {
+    if (userExists(username)) {
+        return;
+    }
+    User u;
+    u.username = username;
+    u.passwordHash = hashPassword(password);
+    u.isAdmin = isAdmin;
+    u.hasRoot = false;
+    users.push_back(u);
+    saveUsers();
+}
+
+void Kernel::loadUsers() {
+    users.clear();
+    try {
+        std::filesystem::path p = std::filesystem::current_path() / "var" / "users.txt";
+        std::ifstream in(p);
+        if (!in) return;
+        std::string line;
+        while (std::getline(in, line)) {
+            if (line.empty()) continue;
+            // format: username:passwordHash:isAdmin:hasRoot
+            std::vector<std::string> parts;
+            std::istringstream ss(line);
+            std::string tok;
+            while (std::getline(ss, tok, ':')) parts.push_back(tok);
+            if (parts.size() >= 2) {
+                User u;
+                u.username = parts[0];
+                u.passwordHash = parts[1];
+                u.isAdmin = (parts.size() > 2 && parts[2] == "1");
+                u.hasRoot = (parts.size() > 3 && parts[3] == "1");
+                users.push_back(u);
+            }
+        }
+    } catch (...) {
+        // ignore
+    }
+}
+
+void Kernel::saveUsers() {
+    try {
+        std::filesystem::path dir = std::filesystem::current_path() / "var";
+        std::filesystem::create_directories(dir);
+        std::filesystem::path p = dir / "users.txt";
+        std::ofstream out(p, std::ios::trunc);
+        if (!out) return;
+        for (const auto& u : users) {
+            out << u.username << ":" << u.passwordHash << ":" << (u.isAdmin ? "1" : "0") << ":" << (u.hasRoot ? "1" : "0") << "\n";
+        }
+    } catch (...) {
+        // ignore
+    }
+}
+
+void Kernel::cmdProcctl(const Command& cmd) {
+    // check if package enabled flag exists
+    std::filesystem::path flag = std::filesystem::current_path() / "var" / "process_control_enabled";
+    if (!std::filesystem::exists(flag)) {
+        Console::errormsg("ACCES_DENIED", "Process control package not installed.");
+        return;
+    }
+
+    if (cmd.args.empty()) {
+        Console::println("Usage: procctl start <exe-path> | procctl kill <pid>");
+        return;
+    }
+
+    std::string action = cmd.args[0];
+    if (action == "start") {
+        if (cmd.args.size() < 2) {
+            Console::errormsg("MISSING_ACTION", "Usage: procctl start <exe-path>");
+            return;
+        }
+        std::string exe = cmd.args[1];
+        STARTUPINFOA si{};
+        PROCESS_INFORMATION pi{};
+        si.cb = sizeof(si);
+        BOOL ok = CreateProcessA(nullptr, const_cast<char*>(exe.c_str()), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi);
+        if (!ok) {
+            Console::errormsg("PROCESS_ERROR", "Failed to start process.");
+            return;
+        }
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        Console::println("Process started: " + exe);
+        return;
+    }
+
+    if (action == "kill") {
+        if (cmd.args.size() < 2) {
+            Console::errormsg("MISSING_ACTION", "Usage: procctl kill <pid>");
+            return;
+        }
+        int pid = std::stoi(cmd.args[1]);
+        HANDLE proc = OpenProcess(PROCESS_TERMINATE, FALSE, static_cast<DWORD>(pid));
+        if (!proc) {
+            Console::errormsg("PROCESS_ERROR", "Failed to open process.");
+            return;
+        }
+        if (!TerminateProcess(proc, 1)) {
+            CloseHandle(proc);
+            Console::errormsg("PROCESS_ERROR", "Failed to terminate process.");
+            return;
+        }
+        CloseHandle(proc);
+        Console::println("Process " + std::to_string(pid) + " terminated.");
+        return;
+    }
+
+    Console::errormsg("UNKNOWN_COMMAND", "procctl command not recognized.");
 }
 
 bool Kernel::canAccessRootArea() const { //check if user can access root area, which is either admin or has root rights
