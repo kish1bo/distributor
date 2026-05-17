@@ -658,31 +658,51 @@ void Kernel::cmdAppend(const Command& cmd) { //append to file
     fileSystem->writeFile(cmd.args[0], text, true);
 }
 
-void Kernel::cmdProcesses(const Command& cmd) { //show process list with duplicates counted as xN, e.g.
+void Kernel::cmdProcesses(const Command& cmd) {
     (void)cmd;
+
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
     if (snapshot == INVALID_HANDLE_VALUE) {
         Console::errormsg("PROCESS_ERROR", "Failed to query process list.");
         return;
     }
 
     PROCESSENTRY32W entry;
-    std::wstring exe = entry.szExeFile;
+    entry.dwSize = sizeof(PROCESSENTRY32W);
 
     std::map<std::string, int> counts;
     std::unordered_map<std::string, std::string> displayName;
 
-    if (Process32First(snapshot, &entry)) {
+    if (Process32FirstW(snapshot, &entry)) {
+
         do {
+            std::wstring exe = entry.szExeFile;
+
             char exeBuffer[260];
-            WideCharToMultiByte(CP_ACP, 0, exe.c_str(), -1, exeBuffer, sizeof(exeBuffer), NULL, NULL);
+
+            WideCharToMultiByte(
+                CP_UTF8,
+                0,
+                exe.c_str(),
+                -1,
+                exeBuffer,
+                sizeof(exeBuffer),
+                NULL,
+                NULL
+            );
+
             std::string name = exeBuffer;
+
             std::string key = toLower(name);
+
             counts[key]++;
+
             if (displayName.find(key) == displayName.end()) {
                 displayName[key] = name;
             }
-        } while (Process32Next(snapshot, &entry));
+
+        } while (Process32NextW(snapshot, &entry));
     }
 
     CloseHandle(snapshot);
@@ -693,12 +713,16 @@ void Kernel::cmdProcesses(const Command& cmd) { //show process list with duplica
     }
 
     for (const auto& item : counts) {
+
         const std::string& key = item.first;
         int count = item.second;
+
         std::cout << displayName[key];
+
         if (count > 1) {
             std::cout << " x" << count;
         }
+
         std::cout << "\n";
     }
 }
