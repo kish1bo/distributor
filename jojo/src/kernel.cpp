@@ -21,7 +21,7 @@
 #include <tlhelp32.h>
 
 namespace {
-    constexpr const char* kProgramVersion = "0.3.1";
+    constexpr const char* kProgramVersion = "0.3.2";
 
     std::string formatClock(long long seconds) {
         long long h = seconds / 3600;
@@ -273,42 +273,30 @@ void Kernel::boot() {
 
 void Kernel::initCommands() {
     commands.clear();
-    commands["login"] = [this](const Command& cmd) { cmdLogin(cmd); };
-    commands["logout"] = [this](const Command& cmd) { cmdLogout(cmd); };
-    commands["help"] = [this](const Command& cmd) { cmdHelp(cmd); };
-    commands["whoiam"] = [this](const Command& cmd) { cmdWhoiam(cmd); };
-    commands["where"] = [this](const Command& cmd) {
-        std::string path = cmd.args.empty() ? "." : cmd.args[0];
-        fileSystem->pwd(path);
-    };
-    commands["ls"] = [this](const Command&) { fileSystem->ls(); };
-    commands["mkdir"] = [this](const Command& cmd) { fileSystem->mkdir(cmd.args.empty() ? "" : cmd.args[0]); };
-    commands["mkfile"] = [this](const Command& cmd) {
-        std::string name = cmd.args.empty() ? "" : cmd.args[0];
-        std::string format = cmd.args.size() > 1 ? cmd.args[1] : "";
-        fileSystem->mkfile(name, format);
-    };
-    commands["mktxt"] = [this](const Command& cmd) { fileSystem->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--txt"); };
-    commands["mkjson"] = [this](const Command& cmd) { fileSystem->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--json"); };
-    commands["mkcsv"] = [this](const Command& cmd) { fileSystem->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--csv"); };
-    commands["mkxml"] = [this](const Command& cmd) { fileSystem->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--xml"); };
-    commands["mkmd"] = [this](const Command& cmd) { fileSystem->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--md"); };
-    commands["cd"] = [this](const Command& cmd) { fileSystem->cd(cmd.args.empty() ? "/" : cmd.args[0]); };
-    commands["rm"] = [this](const Command& cmd) { fileSystem->rm(cmd.args.empty() ? "" : cmd.args[0]); };
-    commands["rmdir"] = [this](const Command& cmd) { fileSystem->rmdir(cmd.args.empty() ? "" : cmd.args[0]); };
-    commands["read"] = [this](const Command& cmd) { cmdRead(cmd); };
-    commands["cat"] = [this](const Command& cmd) { cmdRead(cmd); };
-    commands["write"] = [this](const Command& cmd) { cmdWrite(cmd); };
-    commands["append"] = [this](const Command& cmd) { cmdAppend(cmd); };
-    commands["root"] = [this](const Command& cmd) { cmdRoot(cmd); };
-    commands["ps"] = [this](const Command& cmd) { cmdProcesses(cmd); };
-    commands["processes"] = [this](const Command& cmd) { cmdProcesses(cmd); };
-    commands["time"] = [this](const Command& cmd) { timeof(cmd); };
-    commands["jojo"] = [this](const Command& cmd) { cmdJojo(cmd); };
-    commands["systemctl"] = [this](const Command& cmd) { sysctl.handle(cmd); };
-    commands["install"] = [this](const Command& cmd) { instl.install(cmd.args); };
-    commands["instalator"] = [this](const Command& cmd) { instl.run(); };
-    commands["procctl"] = [this](const Command& cmd) { cmdProcctl(cmd); };
+    // core commands
+    addCommand("login", [this](const Command& cmd) { cmdLogin(cmd); }, SystemState::LOGGED_OUT);
+    addCommand("logout", [this](const Command& cmd) { cmdLogout(cmd); }, SystemState::GUEST);
+    addCommand("help", [this](const Command& cmd) { cmdHelp(cmd); }, SystemState::LOGGED_OUT);
+    addCommand("whoiam", [this](const Command& cmd) { cmdWhoiam(cmd); }, SystemState::GUEST);
+    addCommand("read", [this](const Command& cmd) { cmdRead(cmd); }, SystemState::GUEST);
+    addCommand("cat", [this](const Command& cmd) { cmdRead(cmd); }, SystemState::GUEST);
+    addCommand("write", [this](const Command& cmd) { cmdWrite(cmd); }, SystemState::GUEST);
+    addCommand("append", [this](const Command& cmd) { cmdAppend(cmd); }, SystemState::GUEST);
+    addCommand("root", [this](const Command& cmd) { cmdRoot(cmd); }, SystemState::ADMIN);
+    addCommand("ps", [this](const Command& cmd) { cmdProcesses(cmd); }, SystemState::GUEST);
+    addCommand("processes", [this](const Command& cmd) { cmdProcesses(cmd); }, SystemState::GUEST);
+    addCommand("time", [this](const Command& cmd) { timeof(cmd); }, SystemState::GUEST);
+    addCommand("jojo", [this](const Command& cmd) { cmdJojo(cmd); }, SystemState::LOGGED_OUT);
+    addCommand("procctl", [this](const Command& cmd) { cmdProcctl(cmd); }, SystemState::GUEST, true);
+
+    // let modules register their own commands
+    if (fileSystem) fileSystem->registerCommands(this);
+    // sysctl and instalator are global module objects
+    sysctl.sysctl_init();
+    instl.listAvailable(); // no-op call to ensure linkage (modules will register below)
+    // actual module registration
+    instl.registerCommands(this);
+    sysctl.registerCommands(this);
 }
 
 Command Kernel::parseCommand(const std::string& input) {
@@ -439,21 +427,31 @@ void Kernel::handleCommand(const Command& cmd) { //handle incoming commands
     if (cmd.name.empty()) {
         return;
     }
+    auto it = commands.find(cmd.name);
+    if (it == commands.end()) {
+        Console::errormsg("UNKNOWN_COMMAND", "Type 'help' for available commands.");
+        return;
+    }
 
-    if (systemState == SystemState::LOGGED_OUT &&
-        cmd.name != "login" &&
-        cmd.name != "help" &&
-        cmd.name != "jojo") {
+    const CommandEntry& entry = it->second;
+    // check root requirement
+    if (entry.requireRoot && !canAccessRootArea()) {
+        Console::errormsg("ACCES_DENIED", "Please login with a user with root/admin rights.");
+        return;
+    }
+    // check minimum state
+    if (static_cast<int>(systemState) < static_cast<int>(entry.minState)) {
         Console::errormsg("MISSING_ACTION", "Please login first.");
         return;
     }
 
-    auto it = commands.find(cmd.name);
-    if (it != commands.end()) {
-        it->second(cmd);
-    } else {
-        Console::errormsg("UNKNOWN_COMMAND", "Type 'help' for available commands.");
-    }
+    entry.handler(cmd);
+}
+
+void Kernel::addCommand(const std::string& name, std::function<void(const Command&)> handler,
+                       SystemState minState, bool requireRoot) {
+    CommandEntry e{handler, minState, requireRoot};
+    commands[name] = std::move(e);
 }
 
 void Kernel::cmdLogin(const Command& cmd) { //handle login command
@@ -658,7 +656,7 @@ void Kernel::cmdAppend(const Command& cmd) { //append to file
     fileSystem->writeFile(cmd.args[0], text, true);
 }
 
-void Kernel::cmdProcesses(const Command& cmd) {
+void Kernel::cmdProcesses(const Command& cmd) { //list running processes, showing duplicates as xN
     (void)cmd;
 
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);

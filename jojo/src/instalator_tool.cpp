@@ -458,7 +458,7 @@ void InstalatorTool::install(const std::vector<std::string>& args) {
                 if (toks[0] == "enable_process_control") {
                     fs::path flag = fs::current_path() / "var" / "process_control_enabled";
                     fs::create_directories(flag.parent_path());
-                    std::ofstream(flag);
+                    std::ofstream flagFile(flag.string());
                     continue;
                 }
             }
@@ -568,4 +568,14 @@ void InstalatorTool::run() {
 
         Console::errormsg("UNKNOWN_COMMAND", "Type 'help' for available commands.");
     }
+}
+
+void InstalatorTool::registerCommands(Kernel* kernel) {
+    if (!kernel) return;
+    kernel->addCommand("instalator", [this](const Command&){ this->run(); }, SystemState::GUEST);
+    kernel->addCommand("install", [this](const Command& cmd){ this->install(cmd.args); }, SystemState::GUEST);
+    kernel->addCommand("uninstall", [this](const Command& cmd){ if (cmd.args.empty()) { Console::println("Usage: uninstall <package>"); return; } this->uninstall(cmd.args[0]); }, SystemState::GUEST);
+    kernel->addCommand("list", [this](const Command& cmd){ if (!cmd.args.empty() && toLower(cmd.args[0]) == "installed") { this->listInstalled(); } else { this->listAvailable(); } }, SystemState::GUEST);
+    kernel->addCommand("search", [this](const Command& cmd){ if (cmd.args.empty()) { Console::println("Usage: search <term>"); return; } this->search(cmd.args[0]); }, SystemState::GUEST);
+    kernel->addCommand("info", [this](const Command& cmd){ if (cmd.args.empty()) { Console::println("Usage: info <package>"); return; } this->showInfo(cmd.args[0]); }, SystemState::GUEST);
 }

@@ -123,6 +123,30 @@ void FileSystem::syncToPermissions() {
     }
 }
 
+void FileSystem::registerCommands(Kernel* kernel) {
+    if (!kernel) return;
+    // register filesystem related commands; require logged-in user
+    kernel->addCommand("where", [this](const Command& cmd) {
+        std::string path = cmd.args.empty() ? "." : cmd.args[0];
+        this->pwd(path);
+    }, SystemState::GUEST);
+
+    kernel->addCommand("ls", [this](const Command&){ this->ls(); }, SystemState::GUEST);
+    kernel->addCommand("mkdir", [this](const Command& cmd){ this->mkdir(cmd.args.empty() ? "" : cmd.args[0]); }, SystemState::GUEST);
+    kernel->addCommand("mkfile", [this](const Command& cmd){ std::string name = cmd.args.empty() ? "" : cmd.args[0]; std::string fmt = cmd.args.size() > 1 ? cmd.args[1] : ""; this->mkfile(name, fmt); }, SystemState::GUEST);
+    kernel->addCommand("mktxt", [this](const Command& cmd){ this->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--txt"); }, SystemState::GUEST);
+    kernel->addCommand("mkjson", [this](const Command& cmd){ this->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--json"); }, SystemState::GUEST);
+    kernel->addCommand("mkcsv", [this](const Command& cmd){ this->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--csv"); }, SystemState::GUEST);
+    kernel->addCommand("mkxml", [this](const Command& cmd){ this->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--xml"); }, SystemState::GUEST);
+    kernel->addCommand("mkmd", [this](const Command& cmd){ this->mkfile(cmd.args.empty() ? "" : cmd.args[0], "--md"); }, SystemState::GUEST);
+    kernel->addCommand("cd", [this](const Command& cmd){ this->cd(cmd.args.empty() ? "/" : cmd.args[0]); }, SystemState::GUEST);
+    kernel->addCommand("rm", [this](const Command& cmd){ this->rm(cmd.args.empty() ? "" : cmd.args[0]); }, SystemState::GUEST);
+    kernel->addCommand("rmdir", [this](const Command& cmd){ this->rmdir(cmd.args.empty() ? "" : cmd.args[0]); }, SystemState::GUEST);
+    kernel->addCommand("read", [this](const Command& cmd){ this->readFile(cmd.args.empty() ? "" : cmd.args[0]); }, SystemState::GUEST);
+    kernel->addCommand("write", [this](const Command& cmd){ if (cmd.args.size() < 2) { Console::errormsg("MISSING_ACTION","WRITE: file text required"); return; } std::string text; for (size_t i=1;i<cmd.args.size();++i){ if (i>1) text += " "; text += cmd.args[i]; } this->writeFile(cmd.args[0], text, false); }, SystemState::GUEST);
+    kernel->addCommand("append", [this](const Command& cmd){ if (cmd.args.size() < 2) { Console::errormsg("MISSING_ACTION","APPEND: file text required"); return; } std::string text; for (size_t i=1;i<cmd.args.size();++i){ if (i>1) text += " "; text += cmd.args[i]; } this->writeFile(cmd.args[0], text, true); }, SystemState::GUEST);
+}
+
 void FileSystem::pwd(const std::string& path) {
     if (!isLoggedIn()) {
         Console::errormsg("MISSING_ACTION", "PWD: access denied");

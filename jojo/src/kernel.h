@@ -31,7 +31,12 @@ class FileSystem;
 
 class Kernel {
 private:
-    std::unordered_map<std::string, std::function<void(const Command&)>> commands;
+    struct CommandEntry {
+        std::function<void(const Command&)> handler;
+        SystemState minState;
+        bool requireRoot;
+    };
+    std::unordered_map<std::string, CommandEntry> commands;
     std::vector<User> users;
     User* currentUser;
     SystemState systemState;
@@ -72,6 +77,10 @@ public:
     void run();
     void initCommands();
     void handleCommand(const Command& cmd);
+
+    // register a command with minimum state and whether root access is required
+    void addCommand(const std::string& name, std::function<void(const Command&)> handler,
+                    SystemState minState = SystemState::LOGGED_OUT, bool requireRoot = false);
 
     bool isRootUser() const;
     bool canAccessRootArea() const;

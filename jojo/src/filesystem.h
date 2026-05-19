@@ -23,6 +23,9 @@ public:
     void writeFile(const std::string& target, const std::string& content, bool append);
     void syncToPermissions();
 
+    // register interactive commands into kernel
+    void registerCommands(class Kernel* kernel);
+
 private:
     Kernel* kernel;
     fs::path root;

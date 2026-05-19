@@ -11,4 +11,5 @@ public:
     void listAvailable() const;
     void search(const std::string& filter) const;
     void showInfo(const std::string& package) const;
+    void registerCommands(class Kernel* kernel);
 }; 

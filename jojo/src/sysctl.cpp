@@ -183,6 +183,11 @@ void Sysctl::handle(const Command& cmd) {
     Console::errormsg("UNKNOWN_COMMAND", "systemctl command not recognized. Use status/services/netmngr/start/stop/restart/enable/disable.");
 }
 
+void Sysctl::sysctl_init() {
+    // Initialization hook for the sysctl module.
+    // Currently no startup state is required.
+}
+
 void Sysctl::services(const std::string& parameter) {
     (void)parameter;
 }
@@ -190,4 +195,10 @@ void Sysctl::services(const std::string& parameter) {
 void Sysctl::netmngr(const std::string& parameter, const std::string& extra) {
     (void)parameter;
     (void)extra;
+}
+
+void Sysctl::registerCommands(Kernel* kernel) {
+    if (!kernel) return;
+    kernel->addCommand("systemctl", [this](const Command& cmd){ this->handle(cmd); }, SystemState::GUEST);
+    kernel->addCommand("services", [this](const Command& cmd){ this->handle(cmd); }, SystemState::GUEST);
 }
