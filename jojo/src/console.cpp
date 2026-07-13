@@ -19,26 +19,26 @@ namespace Console {
     constexpr const char* f = "\033[48;2;R;G;Bm";
 
     std::string buildPrompt(const std::string& activeApp, const SystemState& systemState, User* currentUser) {
-    if(systemState == SystemState::LOGGED_OUT && activeApp.empty()) {         //......................................................................................................
+    if(systemState == SystemState::LOGGED_OUT && activeApp.empty()) {         //.......................................................................................................
         return "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";            //
     }                                                                         //
     else if(systemState == SystemState::LOGGED_OUT && !activeApp.empty()) {   //                    activeApp state for not logged user
         return "\033[32m:" + activeApp + "\033[0m\033[33m/\033[31m$\033[0m "; // 
     }                                                                         //
     else if(systemState == SystemState::USER && activeApp.empty()) {          //.......................................................................................................
-        return "\033[36m" + currentUser->username + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";         //
+        return "\033[36m" + g_kernel->currentUsername() + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";   //
     }                                                                                                           //
     else if(systemState == SystemState::USER && !activeApp.empty()) {                                           //        activeApp state for logged user
-        return "\033[36m" + currentUser->username + "\033[32m" + activeApp +"\033[0m\033[33m/\033[31m$\033[0m ";//
+        return "\033[36m" + g_kernel->currentUsername() + "\033[32m" + activeApp +"\033[0m\033[33m/\033[31m$\033[0m ";//
     }                                                                                                           //.....................................................................
     else if(systemState == SystemState::GUEST){                                                                 //
-        return "\033[36m" + currentUser->username + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";         //        Guest do not open the apps
+        return "\033[36m" + g_kernel->currentUsername() + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";   //        Guest do not open the apps
     }                                                                                                           //.....................................................................
     else if(systemState == SystemState::ADMIN && activeApp.empty()){                                            //
-       return "\033[31m" + currentUser->username + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";          //
+       return "\033[31m" + g_kernel->currentUsername() + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";    //
     }                                                                                                           //        activeApp state for admins
     else if (systemState == SystemState::ADMIN && !activeApp.empty()) {                                         //
-        return "\033[36m" + currentUser->username + "\033[32m" + activeApp +"\033[0m\033[33m/\033[31m$\033[0m"; //
+        return "\033[36m" + g_kernel->currentUsername() + "\033[32m" + activeApp +"\033[0m\033[33m/\033[31m$\033[0m";//
     }                                                                                                           //.....................................................................
     else {                                                                                                      //
         return "\033[35m@jojOS__unresolvedprompt:\033[0m\033[33m/\033[31m$\033[0m ";                            //        <unresolved prompt>
@@ -68,7 +68,7 @@ namespace Console {
     
     void titlebar(const std::string& title) {
         Console::clear();
-        Console::println("\033[36mJOJO OS 0.3.1\033[0m");
+        Console::println("\033[36mJOJO OS 0.3.3\033[0m");
         Console::println("Type 'help' to begin\n");
     }
     void colortxt(const std::string& text, const std::string& color) {

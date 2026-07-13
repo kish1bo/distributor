@@ -1,0 +1,31 @@
+[
+  {
+    "name": "hello",
+    "version": "1.0.0",
+    "url": "file://./downloads/package_repo/hello-1.0.pkg",
+    "description": "Sample package that installs a simple placeholder file.",
+    "entry": "hello"
+  },
+  {
+    "name": "network-monitor",
+    "version": "1.2.0",
+    "url": "file://./downloads/package_repo/network-monitor-1.0.pkg",
+    "description": "Network monitoring stub package for test installs.",
+    "entry": "network-monitor"
+  }
+  ,
+  {
+    "name": "user-management",
+    "version": "1.0.0",
+    "url": "file://./downloads/package_repo/user-management-1.0.pkg",
+    "description": "Adds commands for creating users and persists them.",
+    "entry": "user-management"
+  },
+  {
+    "name": "process-control",
+    "version": "1.0.0",
+    "url": "file://./downloads/package_repo/process-control-1.0.pkg",
+    "description": "Enables process control features (start/kill) for the kernel.",
+    "entry": "process-control"
+  }
+]

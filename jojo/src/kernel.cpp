@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cctype>
 #include <ctime>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -21,7 +22,7 @@
 #include <tlhelp32.h>
 
 namespace {
-    constexpr const char* kProgramVersion = "0.3.2";
+    constexpr const char* kProgramVersion = "0.3.3";
 
     std::string formatClock(long long seconds) {
         long long h = seconds / 3600;
@@ -72,16 +73,33 @@ namespace {
     };
 
     namespace logs{
+        bool loggingAccess = true; // Set to true to enable logging, false to disable
         void log(const std::string& message) {
-            std::ofstream logFile("log/history.log", std::ios::app);
-            if (logFile.is_open()) {
-                time_t now = time(nullptr);
-                char timeBuffer[20];
-                strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d %H:%M:%S", localtime(&now));
-                logFile << "[" << timeBuffer << "] " << message << "\n";
+            if (loggingAccess = true) {
+                std::ofstream logFile("jojo/log/history.log", std::ios::app);
+                if (logFile.is_open()) {
+                    time_t now = time(nullptr);
+                    char timeBuffer[20];
+                    strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d %H:%M:%S", localtime(&now));
+                    logFile << "[" << timeBuffer << "] " << message << "\n";
+                }
             }
+            else {
+                return;
+            };
         }
-    }
+        void logaccess(const Command& cmd) {
+            if(g_kernel->getSystemState() == SystemState::ADMIN || cmd.args[0] == "false") {
+                loggingAccess = false;
+            }
+            if(g_kernel->getSystemState() == SystemState::ADMIN || cmd.args[0] == "true") {
+                loggingAccess = true;
+            }
+            else if(g_kernel->getSystemState() != SystemState::ADMIN){
+                Console::errormsg("ACCES_DENIED", "you don't have a permissions");
+            };
+        }
+    };
 
     std::string toLower(std::string input) {
         std::transform(input.begin(), input.end(), input.begin(),
@@ -269,6 +287,10 @@ void Kernel::boot() {
     if (fileSystem) {
         fileSystem->syncToPermissions();
     }
+    SYSTEM_INFO sysInfo;
+    GetNativeSystemInfo(&sysInfo);
+    logs::log("System booted. Version: " + std::string(kProgramVersion) + ", Windows: " + detectWindowsVersion() + ", Arch: " + cpuArchName(sysInfo.wProcessorArchitecture));
+    loadConfig();
 }
 
 void Kernel::initCommands() {
@@ -288,6 +310,7 @@ void Kernel::initCommands() {
     addCommand("time", [this](const Command& cmd) { timeof(cmd); }, SystemState::GUEST);
     addCommand("jojo", [this](const Command& cmd) { cmdJojo(cmd); }, SystemState::LOGGED_OUT);
     addCommand("procctl", [this](const Command& cmd) { cmdProcctl(cmd); }, SystemState::GUEST, true);
+    addCommand("logaccess", [this](const Command& cmd) {logs::logaccess(cmd);}, SystemState::ADMIN, true);
 
     // let modules register their own commands
     if (fileSystem) fileSystem->registerCommands(this);
@@ -483,6 +506,7 @@ void Kernel::cmdLogout(const Command& cmd) { //handle logout command
         fileSystem->syncToPermissions();
     }
 
+    logs::log("User '" + currentUsername() + "' logged out.");
     Console::clear();
     Console::titlebar("");
     Console::println("Logged out successfully.");
@@ -547,6 +571,7 @@ void Kernel::cmdWhoiam(const Command& cmd) { //show current user and role
     Console::print(" (");
     Console::print(currentRoleName());
     Console::println(")");
+    logs::log("User '" + currentUsername() + "' checked whoiam.");
 }
 
 void Kernel::cmdRoot(const Command& cmd) { //grant or revoke root rights to user, or list users with root rights (admin only)
@@ -602,6 +627,7 @@ void Kernel::cmdRoot(const Command& cmd) { //grant or revoke root rights to user
         }
         target->hasRoot = true;
         Console::println("ROOT: access granted to " + target->username);
+        logs::log("Admin " + currentUsername() + " granted root to " + target->username);
         return;
     }
 
@@ -612,6 +638,7 @@ void Kernel::cmdRoot(const Command& cmd) { //grant or revoke root rights to user
         }
         target->hasRoot = false;
         Console::println("ROOT: access revoked from " + target->username);
+        logs::log("Admin " + currentUsername() + " revoked root from " + target->username);
         return;
     }
 
@@ -624,6 +651,7 @@ void Kernel::cmdRead(const Command& cmd) { //read and cat do the same thing
         return;
     }
     fileSystem->readFile(cmd.args[0]);
+    logs::log("File '" + cmd.args[0] + "' read.");
 }
 
 void Kernel::cmdWrite(const Command& cmd) { //overwrite file
@@ -639,6 +667,7 @@ void Kernel::cmdWrite(const Command& cmd) { //overwrite file
     }
 
     fileSystem->writeFile(cmd.args[0], text, false);
+    logs::log("File '" + cmd.args[0] + "' overwritten.");
 }
 
 void Kernel::cmdAppend(const Command& cmd) { //append to file
@@ -654,6 +683,7 @@ void Kernel::cmdAppend(const Command& cmd) { //append to file
     }
 
     fileSystem->writeFile(cmd.args[0], text, true);
+    logs::log("File '" + cmd.args[0] + "' appended.");
 }
 
 void Kernel::cmdProcesses(const Command& cmd) { //list running processes, showing duplicates as xN
@@ -723,6 +753,7 @@ void Kernel::cmdProcesses(const Command& cmd) { //list running processes, showin
 
         std::cout << "\n";
     }
+    logs::log("Process list viewed.");
 }
 
 void Kernel::cmdJojo(const Command& cmd) {
@@ -885,6 +916,64 @@ void Kernel::addUser(const std::string& username, const std::string& password, b
     u.hasRoot = false;
     users.push_back(u);
     saveUsers();
+    logs::log("New user added: " + username + (isAdmin ? " (admin)" : ""));
+}
+
+void Kernel::loadConfig() {
+    try {
+        std::vector<std::filesystem::path> candidates;
+        const std::filesystem::path cwd = std::filesystem::current_path();
+        candidates.push_back(cwd / "var" / "config.txt");
+        candidates.push_back(cwd / "jojo" / "var" / "config.txt");
+        candidates.push_back(cwd / "config.txt");
+
+        std::filesystem::path configPath;
+        for (const auto& candidate : candidates) {
+            if (std::filesystem::exists(candidate)) {
+                configPath = candidate;
+                break;
+            }
+        }
+
+        if (configPath.empty()) {
+            return;
+        }
+
+        std::ifstream in(configPath);
+        if (!in) {
+            return;
+        }
+
+        std::string line;
+        int executed = 0;
+        while (std::getline(in, line)) {
+            auto trim = [](std::string value) {
+                const auto first = value.find_first_not_of(" \t\r\n");
+                if (first == std::string::npos) {
+                    return std::string();
+                }
+                const auto last = value.find_last_not_of(" \t\r\n");
+                return value.substr(first, last - first + 1);
+            };
+
+            std::string trimmed = trim(line);
+            if (trimmed.empty() || trimmed[0] == '#') {
+                continue;
+            }
+
+            Command cmd = parseCommand(trimmed);
+            if (!cmd.name.empty()) {
+                handleCommand(cmd);
+                ++executed;
+            }
+        }
+
+        if (executed > 0) {
+            logs::log("Startup config executed from " + configPath.string() + ".");
+        }
+    } catch (...) {
+        // ignore startup config errors
+    }
 }
 
 void Kernel::loadUsers() {
@@ -910,6 +999,7 @@ void Kernel::loadUsers() {
                 users.push_back(u);
             }
         }
+        logs::log("User data loaded. " + std::to_string(users.size()) + " users found.");
     } catch (...) {
         // ignore
     }
@@ -928,6 +1018,7 @@ void Kernel::saveUsers() {
     } catch (...) {
         // ignore
     }
+    logs::log("New user data saved.");
 }
 
 void Kernel::cmdProcctl(const Command& cmd) {
@@ -961,6 +1052,7 @@ void Kernel::cmdProcctl(const Command& cmd) {
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
         Console::println("Process started: " + exe);
+        logs::log("Process started via procctl: " + exe);
         return;
     }
 
@@ -982,6 +1074,7 @@ void Kernel::cmdProcctl(const Command& cmd) {
         }
         CloseHandle(proc);
         Console::println("Process " + std::to_string(pid) + " terminated.");
+        logs::log("Process killed via procctl: PID " + std::to_string(pid));
         return;
     }
 
