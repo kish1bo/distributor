@@ -154,11 +154,29 @@ static bool parsePackageIndex(const std::string& content, std::vector<PackageInf
 
 static std::vector<PackageInfo> loadPackageIndex() {
     std::vector<PackageInfo> packages;
-    fs::path indexPath = fs::current_path() / "downloads" / "packages.json";
-    std::ifstream in(indexPath, std::ios::binary);
-    if (!in) {
-        return packages;
+    std::vector<fs::path> candidates;
+    candidates.push_back(fs::current_path() / "downloads" / "packages.json");
+    candidates.push_back(fs::current_path() / "jojo" / "downloads" / "packages.json");
+    candidates.push_back(fs::current_path() / "downloads" / "packages.json");
+    // also try executable dir
+    try {
+        char exeBuf[MAX_PATH];
+        if (GetModuleFileNameA(NULL, exeBuf, MAX_PATH) > 0) {
+            fs::path exeDir = fs::path(exeBuf).parent_path();
+            candidates.push_back(exeDir / "jojo" / "downloads" / "packages.json");
+            candidates.push_back(exeDir / "downloads" / "packages.json");
+            auto parent = exeDir.parent_path();
+            if (!parent.empty()) candidates.push_back(parent / "jojo" / "downloads" / "packages.json");
+        }
+    } catch (...) {}
+
+    fs::path indexPath;
+    for (const auto& c : candidates) {
+        if (!c.empty() && fs::exists(c)) { indexPath = c; break; }
     }
+    if (indexPath.empty()) return packages;
+    std::ifstream in(indexPath, std::ios::binary);
+    if (!in) return packages;
     std::ostringstream contents;
     contents << in.rdbuf();
     parsePackageIndex(contents.str(), packages);

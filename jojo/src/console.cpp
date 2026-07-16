@@ -1,6 +1,7 @@
 #include "console.h"
 #include <windows.h>
 #include <iostream>
+#include <filesystem>
 
 namespace {
     void enableANSI() {
@@ -19,26 +20,36 @@ namespace Console {
     constexpr const char* f = "\033[48;2;R;G;Bm";
 
     std::string buildPrompt(const std::string& activeApp, const SystemState& systemState, User* currentUser) {
+    // compute current directory name
+    std::string cwdName;
+    try {
+        auto p = std::filesystem::current_path();
+        cwdName = p.filename().string();
+        if (cwdName.empty()) cwdName = "/";
+    } catch (...) {
+        cwdName = "/";
+    }
+
     if(systemState == SystemState::LOGGED_OUT && activeApp.empty()) {         //.......................................................................................................
-        return "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";            //
+        return "\033[35m@jojOS:\033[0m\033[33m/" + cwdName + "/\033[31m$\033[0m ";            //
     }                                                                         //
     else if(systemState == SystemState::LOGGED_OUT && !activeApp.empty()) {   //                    activeApp state for not logged user
-        return "\033[32m:" + activeApp + "\033[0m\033[33m/\033[31m$\033[0m "; // 
+        return "\033[32m:" + activeApp + "\033[0m\033[33m/" + cwdName + "/\033[31m$\033[0m "; // 
     }                                                                         //
     else if(systemState == SystemState::USER && activeApp.empty()) {          //.......................................................................................................
-        return "\033[36m" + g_kernel->currentUsername() + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";   //
+        return "\033[36m" + g_kernel->currentUsername() + "\033[35m@jojOS:\033[0m\033[33m/" + cwdName + "/\033[31m$\033[0m ";   //
     }                                                                                                           //
     else if(systemState == SystemState::USER && !activeApp.empty()) {                                           //        activeApp state for logged user
-        return "\033[36m" + g_kernel->currentUsername() + "\033[32m" + activeApp +"\033[0m\033[33m/\033[31m$\033[0m ";//
+        return "\033[36m" + g_kernel->currentUsername() + "\033[32m" + activeApp +"\033[0m\033[33m/" + cwdName + "/\033[31m$\033[0m ";//
     }                                                                                                           //.....................................................................
     else if(systemState == SystemState::GUEST){                                                                 //
-        return "\033[36m" + g_kernel->currentUsername() + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";   //        Guest do not open the apps
+        return "\033[36m" + g_kernel->currentUsername() + "\033[35m@jojOS:\033[0m\033[33m/" + cwdName + "/\033[31m$\033[0m ";   //        Guest do not open the apps
     }                                                                                                           //.....................................................................
     else if(systemState == SystemState::ADMIN && activeApp.empty()){                                            //
-       return "\033[31m" + g_kernel->currentUsername() + "\033[35m@jojOS:\033[0m\033[33m/\033[31m$\033[0m ";    //
+       return "\033[31m" + g_kernel->currentUsername() + "\033[35m@jojOS:\033[0m\033[33m/" + cwdName + "/\033[31m$\033[0m ";    //
     }                                                                                                           //        activeApp state for admins
     else if (systemState == SystemState::ADMIN && !activeApp.empty()) {                                         //
-        return "\033[36m" + g_kernel->currentUsername() + "\033[32m" + activeApp +"\033[0m\033[33m/\033[31m$\033[0m";//
+        return "\033[36m" + g_kernel->currentUsername() + "\033[32m" + activeApp +"\033[0m\033[33m/" + cwdName + "/\033[31m$\033[0m";//
     }                                                                                                           //.....................................................................
     else {                                                                                                      //
         return "\033[35m@jojOS__unresolvedprompt:\033[0m\033[33m/\033[31m$\033[0m ";                            //        <unresolved prompt>

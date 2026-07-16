@@ -49,6 +49,7 @@ private:
     void cmdWhoiam(const Command& cmd);
     void cmdRoot(const Command& cmd);
     void cmdRead(const Command& cmd);
+    void cmdUser(const Command& cmd);
     void cmdWrite(const Command& cmd);
     void cmdAppend(const Command& cmd);
     void cmdProcesses(const Command& cmd);

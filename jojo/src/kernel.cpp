@@ -72,32 +72,41 @@ namespace {
         }
     };
 
+    // forward declaration: toLower is defined later in this translation unit
+    std::string toLower(std::string input);
+
     namespace logs{
         bool loggingAccess = true; // Set to true to enable logging, false to disable
         void log(const std::string& message) {
-            if (loggingAccess = true) {
-                std::ofstream logFile("jojo/log/history.log", std::ios::app);
-                if (logFile.is_open()) {
-                    time_t now = time(nullptr);
-                    char timeBuffer[20];
-                    strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d %H:%M:%S", localtime(&now));
-                    logFile << "[" << timeBuffer << "] " << message << "\n";
+            if (loggingAccess) {
+                try {
+                    std::filesystem::create_directories("jojo/log");
+                    std::ofstream logFile("jojo/log/history.log", std::ios::app);
+                    if (logFile.is_open()) {
+                        time_t now = time(nullptr);
+                        char timeBuffer[20];
+                        strftime(timeBuffer, sizeof(timeBuffer), "%Y-%m-%d %H:%M:%S", localtime(&now));
+                        logFile << "[" << timeBuffer << "] " << message << "\n";
+                    }
+                } catch (...) {
+                    // ignore logging errors
                 }
             }
-            else {
-                return;
-            };
         }
         void logaccess(const Command& cmd) {
-            if(g_kernel->getSystemState() == SystemState::ADMIN || cmd.args[0] == "false") {
-                loggingAccess = false;
+            if (cmd.args.empty()) {
+                Console::errormsg("MISSING_ACTION", "Usage: logaccess <true|false>");
+                return;
             }
-            if(g_kernel->getSystemState() == SystemState::ADMIN || cmd.args[0] == "true") {
-                loggingAccess = true;
-            }
-            else if(g_kernel->getSystemState() != SystemState::ADMIN){
+            if (!g_kernel) return;
+            if (g_kernel->getSystemState() != SystemState::ADMIN) {
                 Console::errormsg("ACCES_DENIED", "you don't have a permissions");
-            };
+                return;
+            }
+            std::string v = toLower(cmd.args[0]);
+            if (v == "true" || v == "1") loggingAccess = true;
+            else if (v == "false" || v == "0") loggingAccess = false;
+            else Console::errormsg("MISSING_ACTION", "Usage: logaccess <true|false>");
         }
     };
 
@@ -311,6 +320,7 @@ void Kernel::initCommands() {
     addCommand("jojo", [this](const Command& cmd) { cmdJojo(cmd); }, SystemState::LOGGED_OUT);
     addCommand("procctl", [this](const Command& cmd) { cmdProcctl(cmd); }, SystemState::GUEST, true);
     addCommand("logaccess", [this](const Command& cmd) {logs::logaccess(cmd);}, SystemState::ADMIN, true);
+    addCommand("user", [this](const Command& cmd) { cmdUser(cmd); }, SystemState::GUEST);
 
     // let modules register their own commands
     if (fileSystem) fileSystem->registerCommands(this);
@@ -391,7 +401,7 @@ bool Kernel::userExists(const std::string& login) const { //check if user with g
 void Kernel::run() { //main loop
     std::string input;
     while (true) {
-        std::cout << Console::buildPrompt("");
+        std::cout << Console::buildPrompt("", systemState, currentUser);
         std::getline(std::cin, input);
 
         if (input == "exit") break;
@@ -443,6 +453,7 @@ bool Kernel::login(const std::string& username, const std::string& password) { /
     }
 
     Console::errormsg("NO_MEMBER_FOUND", "Invalid username or password.");
+    logs::log("Someone tries to log in with " + username + password);
     return false;
 }
 
@@ -520,6 +531,9 @@ void Kernel::cmdHelp(const Command& cmd) {
     Console::println("  whoiam - Show who is logged in");
     Console::println("  root grant|revoke <username> - Manage root rights (admin only)");
     Console::println("  root list - Show users with root rights");
+    Console::println("  user add <username> <password> [--admin] - Create a new user (admin/root only)");
+    Console::println("  user del <username> - Delete a user (admin/root only)");
+    Console::println("  user list - List users (admin/root only)");
     Console::println("  where [.|..|/] - Show current directory");
     Console::println("  cd <directory> - Change directory");
     Console::println("  ls - List directory contents");
@@ -645,13 +659,83 @@ void Kernel::cmdRoot(const Command& cmd) { //grant or revoke root rights to user
     Console::errormsg("MISSING_ACTION", "Usage: root grant|revoke <username> | root list");
 }
 
+void Kernel::cmdUser(const Command& cmd) {
+    if (cmd.args.empty()) {
+        Console::errormsg("MISSING_ACTION", "Usage: user add|del|list ...");
+        return;
+    }
+
+    std::string action = toLower(cmd.args[0]);
+    if (action == "list") {
+        if (!canAccessRootArea()) {
+            Console::errormsg("ACCES_DENIED", "user list requires admin/root rights");
+            return;
+        }
+        Console::println("Users:");
+        for (const auto& u : users) {
+            std::string marker;
+            if (u.isAdmin) marker = " (admin)";
+            else if (u.hasRoot) marker = " (root)";
+            Console::println("  " + u.username + marker);
+        }
+        return;
+    }
+
+    if (action == "add") {
+        if (!canAccessRootArea()) {
+            Console::errormsg("ACCES_DENIED", "user add requires admin/root rights");
+            return;
+        }
+        if (cmd.args.size() < 3) {
+            Console::errormsg("MISSING_ACTION", "Usage: user add <username> <password> [--admin]");
+            return;
+        }
+        std::string username = cmd.args[1];
+        std::string password = cmd.args[2];
+        bool isAdmin = false;
+        if (cmd.args.size() > 3 && (cmd.args[3] == "--admin" || toLower(cmd.args[3]) == "admin")) {
+            isAdmin = true;
+        }
+        addUser(username, password, isAdmin);
+        Console::println("User added: " + username);
+        return;
+    }
+
+    if (action == "del" || action == "delete") {
+        if (!canAccessRootArea()) {
+            Console::errormsg("ACCES_DENIED", "user del requires admin/root rights");
+            return;
+        }
+        if (cmd.args.size() < 2) {
+            Console::errormsg("MISSING_ACTION", "Usage: user del <username>");
+            return;
+        }
+        std::string username = cmd.args[1];
+        if (toLower(username) == "guest") {
+            Console::errormsg("INVALID_TARGET", "guest cannot be deleted");
+            return;
+        }
+        auto it = std::find_if(users.begin(), users.end(), [&](const User& u){ return u.username == username; });
+        if (it == users.end()) {
+            Console::errormsg("NO_MEMBER_FOUND", "User not found");
+            return;
+        }
+        users.erase(it);
+        saveUsers();
+        Console::println("User deleted: " + username);
+        return;
+    }
+
+    Console::errormsg("UNKNOWN_COMMAND", "user subcommand not recognized");
+}
+
 void Kernel::cmdRead(const Command& cmd) { //read and cat do the same thing
     if (cmd.args.empty()) {
         Console::errormsg("MISSING_ACTION", "Usage: read <file>");
         return;
     }
     fileSystem->readFile(cmd.args[0]);
-    logs::log("File '" + cmd.args[0] + "' read.");
+    logs::log("File '" + cmd.args[0] + "'was read.");
 }
 
 void Kernel::cmdWrite(const Command& cmd) { //overwrite file
@@ -683,7 +767,7 @@ void Kernel::cmdAppend(const Command& cmd) { //append to file
     }
 
     fileSystem->writeFile(cmd.args[0], text, true);
-    logs::log("File '" + cmd.args[0] + "' appended.");
+    logs::log(currentRoleName() + "appended to" + cmd.args[0]);
 }
 
 void Kernel::cmdProcesses(const Command& cmd) { //list running processes, showing duplicates as xN
@@ -927,9 +1011,28 @@ void Kernel::loadConfig() {
         candidates.push_back(cwd / "jojo" / "var" / "config.txt");
         candidates.push_back(cwd / "config.txt");
 
+        // also check executable directory and parent directories
+        try {
+            char exePathBuf[MAX_PATH];
+            if (GetModuleFileNameA(NULL, exePathBuf, MAX_PATH) > 0) {
+                std::filesystem::path exePath(exePathBuf);
+                auto exeDir = exePath.parent_path();
+                candidates.push_back(exeDir / "jojo" / "var" / "config.txt");
+                candidates.push_back(exeDir / "var" / "config.txt");
+                candidates.push_back(exeDir / "config.txt");
+                auto parent = exeDir.parent_path();
+                if (!parent.empty()) {
+                    candidates.push_back(parent / "jojo" / "var" / "config.txt");
+                    candidates.push_back(parent / "var" / "config.txt");
+                }
+            }
+        } catch (...) {
+            // ignore
+        }
+
         std::filesystem::path configPath;
         for (const auto& candidate : candidates) {
-            if (std::filesystem::exists(candidate)) {
+            if (!candidate.empty() && std::filesystem::exists(candidate)) {
                 configPath = candidate;
                 break;
             }
