@@ -433,3 +433,35 @@ void FileSystem::writeFile(const std::string& target, const std::string& content
         Console::errormsg("IO_ERROR", "WRITE: write failed");
     }
 }
+
+bool FileSystem::loadText(const std::string& target, std::string& content, std::string& error) {
+    if (!isLoggedIn()) { error = "NANO: access denied"; return false; }
+    if (target.empty()) { error = "NANO: file name required"; return false; }
+    syncToPermissions();
+    fs::path targetPath = resolvePath(target);
+    if (!isInsideBoundary(targetPath, activeBoundary())) { error = "NANO: access denied"; return false; }
+    if (!fs::exists(targetPath)) { content.clear(); return true; }
+    if (fs::is_directory(targetPath)) { error = "NANO: target is a directory"; return false; }
+    std::ifstream in(targetPath, std::ios::binary);
+    if (!in) { error = "NANO: cannot open file"; return false; }
+    content.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    return true;
+}
+
+bool FileSystem::saveText(const std::string& target, const std::string& content, std::string& error) {
+    if (!isLoggedIn()) { error = "NANO: access denied"; return false; }
+    if (target.empty()) { error = "NANO: file name required"; return false; }
+    syncToPermissions();
+    fs::path targetPath = resolvePath(target);
+    if (!isInsideBoundary(targetPath, activeBoundary())) { error = "NANO: access denied"; return false; }
+    if (fs::exists(targetPath) && fs::is_directory(targetPath)) { error = "NANO: target is a directory"; return false; }
+    if (!targetPath.parent_path().empty() && !fs::exists(targetPath.parent_path())) {
+        error = "NANO: parent directory does not exist";
+        return false;
+    }
+    std::ofstream out(targetPath, std::ios::binary | std::ios::trunc);
+    if (!out) { error = "NANO: cannot save file"; return false; }
+    out << content;
+    if (!out.good()) { error = "NANO: write failed"; return false; }
+    return true;
+}

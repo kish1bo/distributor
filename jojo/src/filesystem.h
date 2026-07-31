@@ -21,6 +21,8 @@ public:
     void rm(const std::string& target);
     void readFile(const std::string& target);
     void writeFile(const std::string& target, const std::string& content, bool append);
+    bool loadText(const std::string& target, std::string& content, std::string& error);
+    bool saveText(const std::string& target, const std::string& content, std::string& error);
     void syncToPermissions();
 
     // register interactive commands into kernel

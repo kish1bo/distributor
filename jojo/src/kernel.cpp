@@ -5,6 +5,7 @@
 #include "filesystem.h"
 #include "sysctl.h"
 #include "instalator_tool.h"
+#include "nano.h"
 #include <fstream>
 #include <functional>
 #include <algorithm>
@@ -313,6 +314,7 @@ void Kernel::initCommands() {
     addCommand("cat", [this](const Command& cmd) { cmdRead(cmd); }, SystemState::GUEST);
     addCommand("write", [this](const Command& cmd) { cmdWrite(cmd); }, SystemState::GUEST);
     addCommand("append", [this](const Command& cmd) { cmdAppend(cmd); }, SystemState::GUEST);
+    addCommand("nano", [this](const Command& cmd) { cmdNano(cmd); }, SystemState::GUEST);
     addCommand("root", [this](const Command& cmd) { cmdRoot(cmd); }, SystemState::ADMIN);
     addCommand("ps", [this](const Command& cmd) { cmdProcesses(cmd); }, SystemState::GUEST);
     addCommand("processes", [this](const Command& cmd) { cmdProcesses(cmd); }, SystemState::GUEST);
@@ -543,6 +545,7 @@ void Kernel::cmdHelp(const Command& cmd) {
     Console::println("  read <file> - Read file content");
     Console::println("  write <file> <text...> - Overwrite file");
     Console::println("  append <file> <text...> - Append to file");
+    Console::println("  nano <file> - Open the file in the keyboard editor");
     Console::println("  rm <file> - Remove file");
     Console::println("  rmdir <directory> - Remove directory recursively");
     Console::println("  ps - List running processes (duplicates shown as xN)");
@@ -768,6 +771,23 @@ void Kernel::cmdAppend(const Command& cmd) { //append to file
 
     fileSystem->writeFile(cmd.args[0], text, true);
     logs::log(currentRoleName() + "appended to" + cmd.args[0]);
+}
+
+void Kernel::cmdNano(const Command& cmd) {
+    if (cmd.args.empty()) {
+        Console::errormsg("MISSING_ACTION", "Usage: nano <file>");
+        return;
+    }
+
+    NanoEditor editor;
+    editor.edit(cmd.args[0],
+        [this](const std::string& path, std::string& content, std::string& error) {
+            return fileSystem->loadText(path, content, error);
+        },
+        [this](const std::string& path, const std::string& content, std::string& error) {
+            return fileSystem->saveText(path, content, error);
+        });
+    logs::log("File '" + cmd.args[0] + "' opened in nano.");
 }
 
 void Kernel::cmdProcesses(const Command& cmd) { //list running processes, showing duplicates as xN

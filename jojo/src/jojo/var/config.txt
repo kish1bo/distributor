@@ -1,6 +1,6 @@
 # Startup commands for JOJO OS
 # Each non-empty line is executed as a command on startup.
-# Example:
+# Write here your script:
 login roman 1234
-# mkdir startup
-# write startup/hello.txt hello from config
+where
+

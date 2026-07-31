@@ -52,6 +52,7 @@ private:
     void cmdUser(const Command& cmd);
     void cmdWrite(const Command& cmd);
     void cmdAppend(const Command& cmd);
+    void cmdNano(const Command& cmd);
     void cmdProcesses(const Command& cmd);
     void cmdJojo(const Command& cmd);
     void timeof(const Command& cmd);
